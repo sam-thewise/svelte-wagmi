@@ -10,18 +10,19 @@ import {
 	type Config,
 	http
 } from '@wagmi/core';
-import { mainnet, polygon, optimism, arbitrum, type Chain } from '@wagmi/core/chains';
-import { createWeb3Modal, type Web3Modal } from '@web3modal/wagmi';
-
+//import { mainnet, polygon, optimism, arbitrum, type Chain } from '@wagmi/core/chains';
+import { createAppKit, type AppKit, type Metadata } from '@reown/appkit';
+import { WagmiAdapter} from '@reown/appkit-adapter-wagmi';
+import {mainnet, polygon, optimism, arbitrum, avalanche, type Chain} from '@reown/appkit/networks';
 export const connected = writable<boolean>(false);
 export const wagmiLoaded = writable<boolean>(false);
 export const chainId = writable<number | null | undefined>(null);
 export const signerAddress = writable<string | null>(null);
 export const configuredConnectors = writable<CreateConnectorFn[]>([]);
 export const loading = writable<boolean>(true);
-export const web3Modal = writable<Web3Modal>();
+export const web3Modal = writable<AppKit>();
 export const wagmiConfig = writable<Config>();
-
+export const wagmiAdapter = writable<WagmiAdapter>();
 type DefaultConfigProps = {
 	appName: string;
 	appIcon?: string | null;
@@ -32,15 +33,17 @@ type DefaultConfigProps = {
 	chains?: Chain[] | null;
 	connectors: CreateConnectorFn[];
 	walletConnectProjectId: string;
+	metadata?: Metadata;
 };
-const defaultChains = [mainnet, polygon, optimism, arbitrum];
+const defaultChains = [mainnet, polygon, optimism, arbitrum, avalanche];
 
 export const defaultConfig = ({
 	autoConnect = true,
 	chains = defaultChains,
 	alchemyId,
 	connectors,
-	walletConnectProjectId
+	walletConnectProjectId,
+	metadata
 }: DefaultConfigProps) => {
 	if (connectors) configuredConnectors.set(connectors);
 
@@ -49,33 +52,23 @@ export const defaultConfig = ({
 
 	const url = alchemyId ? http(`https://eth-mainnet.g.alchemy.com/v2/${alchemyId}`) : http();
 
-	const chainsToUse = chains ? chains.map((chain) => chain) : [];
-	const transports = chains
-		? chains.reduce(
-				(acc, chain) => ({
-					...acc,
-					[chain.id]: url
-				}),
-				{}
-			)
-		: {};
+	const wagmiAdapt = new WagmiAdapter({
+		networks: [mainnet, arbitrum, polygon, optimism],
+		projectId: walletConnectProjectId
+	})
+	
+	wagmiAdapter.set(wagmiAdapt);
 
-	const config = createConfig({
-		chains: chainsToUse as [Chain, ...Chain[]],
-		transports,
-		connectors: get(configuredConnectors)
-	});
+	wagmiConfig.set(wagmiAdapt.wagmiConfig);
 
-	wagmiConfig.set(config);
-
-	if (autoConnect) reconnect(config);
-
-	const modal = createWeb3Modal({
-		wagmiConfig: config,
+	if (autoConnect) reconnect(wagmiAdapt.wagmiConfig);
+	const modal = createAppKit({
+		adapters: [wagmiAdapt],
 		projectId: walletConnectProjectId,
-		enableAnalytics: true, // Optional - defaults to your Cloud configuration
-		enableOnramp: true // Optional - false as default
+		networks: [mainnet, arbitrum, optimism, polygon],
+		metadata
 	});
+
 
 	web3Modal.set(modal);
 	wagmiLoaded.set(true);
